@@ -4,6 +4,7 @@ import type { SrsCard } from '../types';
 import { DAY_MS } from './progress';
 import { reviewWorkload } from './learningStats';
 import { buildDeck, countDue, countMissed, countUnresolved, eligibleReviewCards, nextDueAfter } from './review';
+import type { ReviewCard } from './reviewGrading';
 import { newCard } from './srs';
 
 const now = 1000000000000;
@@ -21,7 +22,8 @@ describe('review decks and unique counts', () => {
     expect(countMissed(cards, bundle)).toBe(2);
     cards[0].lapses += 1;
     expect(countMissed(cards, bundle)).toBe(2);
-    expect(countUnresolved(bundle, [{ ...cards[0], needsWork: false }, cards[1]])).toBe(1);
+    const resolved: ReviewCard[] = [{ ...cards[0], needsWork: false }, cards[1]];
+    expect(countUnresolved(bundle, resolved)).toBe(1);
   });
   test('eligible cards deduplicate concepts and resolve stale question IDs', () => {
     const cards = [card(1), { ...card(1), questionId: 999 }];

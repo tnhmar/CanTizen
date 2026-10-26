@@ -6,15 +6,21 @@ import { Button, Text, useTheme } from 'react-native-paper';
 import { activeBlocks, alignSentences, layoutBlocks, sentencesFromTiming } from '../../../../src/audio/alignment';
 import { AudioBar } from '../../../../src/components/AudioBar';
 import { DefinitionSheet } from '../../../../src/components/DefinitionSheet';
+import { GuidedLessonSummary } from '../../../../src/components/GuidedLessonSummary';
+import { findSummaryPassage, guidedSummary } from '../../../../src/content/guidedSummaries';
+import { LessonSummary } from '../../../../src/components/LessonSummary';
 import { RichText } from '../../../../src/components/RichText';
 import { getAudio } from '../../../../src/content/audio';
+import { lessonSummary } from '../../../../src/content/lessonSummaries';
 import { useBundle } from '../../../../src/content/useBundle';
 import { useCompletionText } from '../../../../src/i18n/completion';
 import { learningLessonQuizIds, lessonStatus } from '../../../../src/logic/completion';
 import { learningPassPercent } from '../../../../src/logic/learningLevels';
+import { lessonVisibility } from '../../../../src/logic/lessonDisplay';
 import { makeGlossaryMatcher } from '../../../../src/logic/glossary';
 import { useProgress } from '../../../../src/store/progress';
 import { useSettings } from '../../../../src/store/settings';
+import { useLessonDisplay } from '../../../../src/store/lessonDisplay';
 import type { ContentBundle, GlossaryTerm } from '../../../../src/types';
 
 const stamp = (): number => Date.now();
@@ -27,9 +33,13 @@ function LessonReader({ lessonId, bundle }: { lessonId: number; bundle: ContentB
   const passPercent = useSettings((s) => learningPassPercent(s.quizLevel));
   const textScale = useSettings((s) => s.textScale); const setTextScale = useSettings((s) => s.setTextScale);
   const setThemeMode = useSettings((s) => s.setThemeMode); const reduce = useSettings((s) => s.reduceMotion);
+  const display = useLessonDisplay((s) => s.mode); const summary = lessonSummary(bundle.lang, lessonId);
+  const setDisplay = useLessonDisplay((s) => s.setMode); const guided = guidedSummary(bundle.lang, lessonId);
+  const { showFull, showSummary } = lessonVisibility(bundle.lang, summary !== null || guided !== null, display);
   const progress = useProgress(); const { startLesson: start, setLastRoute, addStudyTime, markLessonStudied } = progress;
   const [ms, setMs] = useState(0); const [follow, setFollow] = useState(true); const [definition, setDefinition] = useState<GlossaryTerm | null>(null);
   const scrollRef = useRef<ScrollView>(null); const blockY = useRef<Record<number, number>>({});
+  const summaryY = useRef(0); const pendingPassage = useRef<number | null>(null);
   const lesson = bundle.lessons.find((l) => l.id === lessonId); const audio = lesson ? getAudio(bundle.lang, lesson.id) : undefined;
   const matcher = useMemo(() => makeGlossaryMatcher(bundle.glossary), [bundle]);
   const layout = useMemo(() => layoutBlocks(lesson?.blocks ?? []), [lesson]);
@@ -40,27 +50,49 @@ function LessonReader({ lessonId, bundle }: { lessonId: number; bundle: ContentB
     if (!lesson) return; start(lesson.id); setLastRoute(`/learn/lesson/${lesson.id}`); const began = stamp();
     return () => addStudyTime(Math.min(Math.max(0, stamp() - began), 1800000));
   }, [lesson, start, setLastRoute, addStudyTime]));
-  useEffect(() => { if (!follow || focus < 0) return; const y = blockY.current[focus]; if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 120), animated: !reduce }); }, [focus, follow, reduce]);
+  useEffect(() => { if (!showFull || !follow || focus < 0) return; const y = blockY.current[focus]; if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 120), animated: !reduce }); }, [focus, follow, reduce, showFull]);
   if (!lesson) return null;
   const chapter = bundle.chapters.find((c) => c.id === lesson.chapterId); const siblings = chapter?.lessonIds ?? [];
   const position = siblings.indexOf(lesson.id) + 1; const nextId = siblings[position]; const quizIds = learningLessonQuizIds(bundle, lesson);
   const status = lessonStatus(progress, lesson.id); const noQuestions = lesson.questionIds.length === 0; const body = 17 * textScale;
-  const jump = () => { const y = blockY.current[focus]; if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 120), animated: !reduce }); setFollow(true); };
+  const jump = () => { if (!showFull) return; const y = blockY.current[focus]; if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 120), animated: !reduce }); setFollow(true); };
+  const scrollToBlock = (index: number) => {
+    const y = blockY.current[index];
+    if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 120), animated: !reduce });
+  };
+  const openPassage = (source: string) => {
+    const index = findSummaryPassage(lesson.blocks, source);
+    if (index === null) return;
+    setFollow(false);
+    if (showFull && blockY.current[index] !== undefined) { scrollToBlock(index); return; }
+    pendingPassage.current = index;
+    setDisplay('both');
+  };
+  const measureBlock = (index: number, y: number) => {
+    blockY.current[index] = y;
+    if (pendingPassage.current === index) { pendingPassage.current = null; scrollToBlock(index); }
+    else if (follow && focus === index && ms > 0) scrollToBlock(index);
+  };
+  const returnToSummary = () => { setFollow(false); scrollRef.current?.scrollTo({ y: summaryY.current, animated: !reduce }); };
   const goNext = () => { if (nextId !== undefined) router.replace(`/learn/lesson/${nextId}`); else router.back(); };
   const cycleSize = () => setTextScale(textScale >= 1.3 ? 1 : textScale >= 1.15 ? 1.3 : 1.15);
   return <View style={styles.root}>
     <Stack.Screen options={{ title: chapter?.title ?? '', headerRight: () => <View style={styles.headerButtons}><Pressable accessibilityRole='button' accessibilityLabel={t('glossaryUi.title')} onPress={() => router.push('/learn/glossary')} style={styles.headerButton}><Text style={styles.headerText}>▤</Text></Pressable><Pressable accessibilityRole='button' accessibilityLabel={t('lessonUi.textSize')} onPress={cycleSize} style={styles.headerButton}><Text style={styles.headerText}>Aa</Text></Pressable><Pressable accessibilityRole='button' accessibilityLabel={t('lessonUi.theme')} onPress={() => setThemeMode(theme.dark ? 'light' : 'dark')} style={styles.headerButton}><Text style={styles.headerText}>{theme.dark ? '☀️' : '🌙'}</Text></Pressable></View> }} />
     <ScrollView ref={scrollRef} style={{ backgroundColor: theme.colors.background }} contentContainerStyle={styles.content} onScrollBeginDrag={() => setFollow(false)}>
       <View style={styles.titleBlock}><Text variant='headlineMedium' style={{ color: theme.colors.secondary, fontWeight: '700' }}>{lesson.title}</Text><Text variant='labelLarge'>{t('lessonUi.lessonLabel', { n: position })} · {text[status]}</Text></View>
-      <Text variant='bodySmall'>{t('glossaryUi.lessonHint')}</Text>
-      {lesson.blocks.map((b, i) => <View key={i} onLayout={(e) => { blockY.current[i] = e.nativeEvent.layout.y; }} style={[styles.block, active.includes(i) && { backgroundColor: theme.colors.primaryContainer }]}>{b.k === 'li' ? <View style={styles.li}><Text style={{ fontSize: body, lineHeight: body * 1.65 }}>•</Text><RichText text={b.t} size={body} style={styles.grow} matcher={matcher} onTerm={openTerm} /></View> : <RichText text={b.t} variant={b.k === 'h' ? 'titleMedium' : 'bodyLarge'} size={b.k === 'h' ? 20 * textScale : body} style={b.k === 'h' ? styles.heading : undefined} matcher={matcher} onTerm={openTerm} />}</View>)}
+      {showSummary ? <View onLayout={(e) => { summaryY.current = e.nativeEvent.layout.y; }}>
+        {guided ? <GuidedLessonSummary summary={guided} textScale={textScale} canOpenPassage={(source) => findSummaryPassage(lesson.blocks, source) !== null} onOpenPassage={openPassage} onReadSummary={() => setFollow(false)} /> : summary ? <LessonSummary sections={summary} textScale={textScale} /> : null}
+      </View> : null}
+      {showFull ? <Text variant='bodySmall'>{t('glossaryUi.lessonHint')}</Text> : null}
+      {showFull && showSummary ? <Text accessibilityRole='header' variant='titleLarge'>Texte intégral</Text> : null}
+      {showFull ? lesson.blocks.map((b, i) => <View key={i} onLayout={(e) => measureBlock(i, e.nativeEvent.layout.y)} style={[styles.block, active.includes(i) && { backgroundColor: theme.colors.primaryContainer }]}>{b.k === 'li' ? <View style={styles.li}><Text style={{ fontSize: body, lineHeight: body * 1.65 }}>•</Text><RichText text={b.t} size={body} style={styles.grow} matcher={matcher} onTerm={openTerm} /></View> : <RichText text={b.t} variant={b.k === 'h' ? 'titleMedium' : 'bodyLarge'} size={b.k === 'h' ? 20 * textScale : body} style={b.k === 'h' ? styles.heading : undefined} matcher={matcher} onTerm={openTerm} />}</View>) : null}
       <View style={styles.actions}>
         <Text accessibilityLiveRegion='polite'>{status === 'completed' ? text.earned : quizIds.length ? text.passRule : noQuestions ? text.noQuiz : text.unavailable}</Text>
         {quizIds.length > 0 ? <Pressable accessibilityRole='button' onPress={() => router.push(`/learn/quiz?kind=lesson&id=${lesson.id}`)} style={[styles.quizCta, { backgroundColor: theme.colors.secondary }]}><View style={styles.grow}><Text style={{ color: theme.colors.onSecondary }}>{t('learnUi.quizCount', { count: quizIds.length })} · {passPercent}%</Text><Text variant='titleMedium' style={{ color: theme.colors.onSecondary }}>{t('lessonUi.startQuiz')}</Text></View><Text style={{ color: theme.colors.onSecondary, fontSize: 26 }}>›</Text></Pressable> : noQuestions && status !== 'completed' ? <Button mode='contained' onPress={() => markLessonStudied(lesson.id, bundle.lang)}>{text.markStudied}</Button> : null}
         <Button mode='outlined' contentStyle={styles.nextButton} onPress={goNext}>{nextId !== undefined ? t('learn.nextLesson') : t('learn.backToChapter')}</Button>
       </View>
     </ScrollView>
-    {audio ? <View style={[styles.footer, { backgroundColor: theme.colors.background }]}><AudioBar source={audio.audio} onTime={setMs} follow={follow} onToggleFollow={() => setFollow(!follow)} onJump={jump} /></View> : null}
+    {audio && showFull ? <View style={[styles.footer, { backgroundColor: theme.colors.background }]}><Text variant='bodySmall'>{bundle.lang === 'fr' ? 'Audio du texte intégral' : 'Full lesson audio'}</Text>{showSummary ? <Button compact onPress={returnToSummary}>{bundle.lang === 'fr' ? 'Retour au résumé' : 'Return to summary'}</Button> : null}<AudioBar source={audio.audio} onTime={setMs} follow={follow} onToggleFollow={() => setFollow(!follow)} onJump={jump} /></View> : null}
     <DefinitionSheet term={definition} onClose={() => setDefinition(null)} onOpen={(term) => { setDefinition(null); router.push(`/learn/glossary?termId=${term.id}`); }} />
   </View>;
 }

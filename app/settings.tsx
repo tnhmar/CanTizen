@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Alert, BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Dialog, Portal, Switch, Text, useTheme } from 'react-native-paper';
 import { LearningLevelSettings } from '../src/components/LearningLevelSettings';
+import { LessonSummarySettings } from '../src/components/LessonSummarySettings';
 import { NativePickerRow } from '../src/components/NativePickerRow';
 import { Panel } from '../src/components/Panel';
 import { ReminderSettings } from '../src/components/ReminderSettings';
@@ -47,6 +48,7 @@ export default function SettingsScreen() {
       <SettingsSection title={text.preferences}>
         {row('language', current === 'fr' ? 'Français' : 'English')}
         {row('quiz', `${quizText[s.quizLevel]} · ${learningPassPercent(s.quizLevel)} %`)}
+        <LessonSummarySettings />
         {row('appearance', text[s.themeMode])}
         {row('text', String(size))}
         {row('haptics', s.haptics ? text.on : text.off)}

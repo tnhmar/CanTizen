@@ -1,12 +1,12 @@
 import { findSummaryPassage, guidedSummary, guidedSummaryIds } from './guidedSummaries';
 
 describe('guided summaries', () => {
-  it('declares twenty-two lessons across three batches', () => {
-    expect([...guidedSummaryIds].sort((a, b) => a - b)).toEqual([18, 19, 22, 23, 24, 25, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 48, 66, 68, 71, 72, 105]);
+  it('declares thirty-two lessons across four batches', () => {
+    expect([...guidedSummaryIds].sort((a, b) => a - b)).toEqual([18, 19, 22, 23, 24, 25, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 66, 68, 71, 72, 105]);
     expect(guidedSummary('en', 48)).toBeNull();
     expect(guidedSummary('fr', -1)).toBeNull();
   });
-  it.each([18, 19, 22, 23, 24, 25, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 48, 66, 68, 71, 72, 105])('has complete content and unique block/item ids for lesson %i', (id) => {
+  it.each([18, 19, 22, 23, 24, 25, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48, 49, 66, 68, 71, 72, 105])('has complete content and unique block/item ids for lesson %i', (id) => {
     const summary = guidedSummary('fr', id)!;
     expect(summary.intro.length).toBeGreaterThan(0);
     expect(summary.blocks.length).toBeGreaterThan(0);

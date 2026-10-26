@@ -1,12 +1,12 @@
 import { findSummaryPassage, guidedSummary, guidedSummaryIds } from './guidedSummaries';
 
-describe('guided summary pilot', () => {
-  it('limits the pilot to the six declared lessons', () => {
-    expect([...guidedSummaryIds].sort((a, b) => a - b)).toEqual([19, 23, 48, 66, 71, 105]);
+describe('guided summaries', () => {
+  it('declares the pilot and next six lessons', () => {
+    expect([...guidedSummaryIds].sort((a, b) => a - b)).toEqual([18, 19, 22, 23, 24, 25, 48, 66, 68, 71, 72, 105]);
     expect(guidedSummary('en', 48)).toBeNull();
     expect(guidedSummary('fr', -1)).toBeNull();
   });
-  it.each([19, 23, 48, 66, 71, 105])('has complete content and unique block/item ids for lesson %i', (id) => {
+  it.each([18, 19, 22, 23, 24, 25, 48, 66, 68, 71, 72, 105])('has complete content and unique block/item ids for lesson %i', (id) => {
     const summary = guidedSummary('fr', id)!;
     expect(summary.intro.length).toBeGreaterThan(0);
     expect(summary.blocks.length).toBeGreaterThan(0);
